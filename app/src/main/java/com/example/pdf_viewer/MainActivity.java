@@ -43,6 +43,8 @@ public class MainActivity extends AppCompatActivity {
     private RecyclerView recyclerView;
     private PdfPageAdapter pdfPageAdapter;
     private List<Bitmap> pdfPages;
+    private TextView logTextView;
+
 
     // Create the ActivityResultLauncher for selecting a PDF
     private final ActivityResultLauncher<Intent> selectPdfLauncher = registerForActivityResult(
@@ -65,6 +67,8 @@ public class MainActivity extends AppCompatActivity {
         recyclerView = findViewById(R.id.recyclerView);
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
         pdfPages = new ArrayList<>();
+        logTextView = findViewById(R.id.logTextView);
+
 
         // Check if the activity was started with an intent to view a PDF
         Intent intent = getIntent();
@@ -83,6 +87,8 @@ public class MainActivity extends AppCompatActivity {
 
         Button nextPdfButton = findViewById(R.id.nextPDF);
         nextPdfButton.setOnClickListener(v -> loadNextPdf());
+
+        listFilesInDirectory();
     }
 
     private void openFilePicker() {
@@ -93,7 +99,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void loadNextPdf() {
         if (pdfUris.isEmpty() || currentPdfIndex == -1) {
-            Toast.makeText(this, "No next PDF available", Toast.LENGTH_SHORT).show();
+            appendLogMessage("NO next PDF");
             return;
         }
 
@@ -109,12 +115,11 @@ public class MainActivity extends AppCompatActivity {
         String parentDir = getRealPathFromURI(uri);  // Assuming getRealFilePath(uri) is implemented correctly
 
         if (parentDir != null) {
-            // Show a toast with the actual parent directory path
-            Toast.makeText(this, "Parent Directory: " + parentDir, Toast.LENGTH_LONG).show();
+            appendLogMessage("LoadPDF: File Selected: " + parentDir);
         } else {
-            // Fallback if the file path cannot be found
-            Toast.makeText(this, "Selected PDF URI: " + uri.toString(), Toast.LENGTH_LONG).show();
+            appendLogMessage("Selected PDF URI: " + uri.toString());
         }
+
 
         try {
             // Open the PDF and render it
@@ -182,7 +187,7 @@ public class MainActivity extends AppCompatActivity {
     private void findAndStoreNextPdf(Uri currentUri) {
         String currentFilePath = getRealPathFromURI(currentUri);
         if (currentFilePath == null) {
-            Toast.makeText(this, "Error retrieving file path.", Toast.LENGTH_SHORT).show();
+            appendLogMessage("Error retrieving file path.");
             return;
         }
 
@@ -190,13 +195,18 @@ public class MainActivity extends AppCompatActivity {
         File parentDir = currentFile.getParentFile();
 
         if (parentDir != null) {
-            Toast.makeText(this, "Parent Directory: " + parentDir.getAbsolutePath(), Toast.LENGTH_SHORT).show();
+            appendLogMessage("findNEXT: Parent Directory: " + parentDir.getAbsolutePath() );
 
             // Get all PDF files in the directory
-            File[] files = parentDir.listFiles((dir, name) -> name.endsWith(".pdf"));
+            File[] files = parentDir.listFiles((dir, name) -> true);
 
             if (files != null && files.length > 0) {
-                Toast.makeText(this, "PDF Files found: " + files.length, Toast.LENGTH_SHORT).show();
+                appendLogMessage("PDF Files found: " + files.length);
+
+                for (File file : files) {
+                    appendLogMessage("File: " + file.getAbsolutePath());
+                }
+
                 Arrays.sort(files);
 
                 for (int i = 0; i < files.length; i++) {
@@ -207,15 +217,44 @@ public class MainActivity extends AppCompatActivity {
                             //updatePdfListView();
                             return;
                         } else {
-                            Toast.makeText(this, "No next PDF found.", Toast.LENGTH_SHORT).show();
+                            appendLogMessage("No next PDF found.");
                         }
                     }
                 }
             } else {
-                Toast.makeText(this, "No PDF files found in the directory.", Toast.LENGTH_SHORT).show();
+                appendLogMessage("No PDF files found in the directory.");
             }
         } else {
-            Toast.makeText(this, "Error finding parent directory.", Toast.LENGTH_SHORT).show();
+            appendLogMessage("Error finding parent directory.");
+        }
+    }
+    private void appendLogMessage(String message) {
+        logTextView.append(message + "\n");
+    }
+
+    private void listFilesInDirectory() {
+        //String directoryPath = "/storage/emulated/0/vo-tan-thon-phe"; // Replace with your absolute path
+        String directoryPath = "/Internal storage/vo-tan-thon-phe"; // Replace with your absolute path
+
+        File directory = new File(directoryPath);
+
+        if (directory.exists() && directory.isDirectory()) {
+            File[] files = directory.listFiles();
+
+            if (files != null && files.length > 0) {
+                StringBuilder fileNames = new StringBuilder();
+                for (File file : files) {
+                    fileNames.append(file.getName()).append("\n");
+                }
+
+                // Update the TextView with the file names
+                TextView textView = findViewById(R.id.logTextView); // Replace with your TextView ID
+                textView.setText(fileNames.toString());
+            } else {
+                appendLogMessage("No files found in the directory.");
+            }
+        } else {
+            appendLogMessage("Invalid directory path.");
         }
     }
 
