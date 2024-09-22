@@ -56,6 +56,7 @@ public class MainActivity extends AppCompatActivity {
     private PdfPageAdapter pdfPageAdapter;
     private List<Bitmap> pdfPages;
     private TextView logTextView;
+    private TextView currentFileTextView;
 
 
     // Create the ActivityResultLauncher for selecting a PDF
@@ -103,7 +104,9 @@ public class MainActivity extends AppCompatActivity {
         nextPdfButton.setOnClickListener(v -> loadNextPdf());
 
 
-        openFolderPicker();
+        Button openFolderButton = findViewById(R.id.openFolderButton);
+        openFolderButton.setOnClickListener(v -> openFolderPicker());
+
     }
 
     private void openFilePicker() {
@@ -165,7 +168,9 @@ public class MainActivity extends AppCompatActivity {
                 // Update the RecyclerView
                 pdfPageAdapter = new PdfPageAdapter(pdfPages);
                 recyclerView.setAdapter(pdfPageAdapter);
+
             }
+
         } catch (IOException e) {
             e.printStackTrace();
             Toast.makeText(this, "Error loading PDF: " + e.getMessage(), Toast.LENGTH_SHORT).show();
