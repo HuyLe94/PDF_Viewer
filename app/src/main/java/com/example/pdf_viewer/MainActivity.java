@@ -1,6 +1,8 @@
 package com.example.pdf_viewer;
 
 import android.content.Intent;
+import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.pdf.PdfRenderer;
@@ -11,9 +13,11 @@ import android.provider.DocumentsContract;
 import android.provider.MediaStore;
 import android.util.Log;
 import android.view.View;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.ListView;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -22,6 +26,9 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
+import androidx.documentfile.provider.DocumentFile;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -32,13 +39,18 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import android.Manifest;
+import android.content.pm.PackageManager;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 
 public class MainActivity extends AppCompatActivity {
 
     private static final int REQUEST_CODE_OPEN_DOCUMENT = 1;
+    private static final int PICK_FOLDER_REQUEST_CODE = 42;
     private int currentPdfResId = R.raw.chapter_1;
     private List<Uri> pdfUris = new ArrayList<>();  // List to hold selected PDF URIs
-    private int currentPdfIndex = -1; // Index of the currently loaded PDF
+    private int currentPdfIndex = 0; // Index of the currently loaded PDF
     private TextView pdfListTextView;
     private RecyclerView recyclerView;
     private PdfPageAdapter pdfPageAdapter;
@@ -70,6 +82,7 @@ public class MainActivity extends AppCompatActivity {
         logTextView = findViewById(R.id.logTextView);
 
 
+
         // Check if the activity was started with an intent to view a PDF
         Intent intent = getIntent();
         if (intent != null && Intent.ACTION_VIEW.equals(intent.getAction())) {
@@ -81,6 +94,7 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
+        checkStoragePermission();
         // Set up the buttons
         Button selectFileButton = findViewById(R.id.selectPDF);
         selectFileButton.setOnClickListener(v -> openFilePicker());
@@ -88,7 +102,8 @@ public class MainActivity extends AppCompatActivity {
         Button nextPdfButton = findViewById(R.id.nextPDF);
         nextPdfButton.setOnClickListener(v -> loadNextPdf());
 
-        listFilesInDirectory();
+
+        openFolderPicker();
     }
 
     private void openFilePicker() {
@@ -99,27 +114,29 @@ public class MainActivity extends AppCompatActivity {
 
     private void loadNextPdf() {
         if (pdfUris.isEmpty() || currentPdfIndex == -1) {
-            appendLogMessage("NO next PDF");
+            appendLogMessage("No PDFs loaded or invalid current index.");
             return;
         }
 
-        currentPdfIndex = (currentPdfIndex + 1) % pdfUris.size(); // Cycle through the list
+        // Increment the current index
+        currentPdfIndex++;
+        if (currentPdfIndex >= pdfUris.size()) {
+            currentPdfIndex = 0; // Loop back to the first PDF
+        }
+
+        appendLogMessage("Loading next PDF at index: " + currentPdfIndex);
         loadPdf(pdfUris.get(currentPdfIndex));
     }
 
 
 
 
+
+
+
+
+
     private void loadPdf(Uri uri) {
-        // Convert content URI to file path
-        String parentDir = getRealPathFromURI(uri);  // Assuming getRealFilePath(uri) is implemented correctly
-
-        if (parentDir != null) {
-            appendLogMessage("LoadPDF: File Selected: " + parentDir);
-        } else {
-            appendLogMessage("Selected PDF URI: " + uri.toString());
-        }
-
 
         try {
             // Open the PDF and render it
@@ -142,16 +159,12 @@ public class MainActivity extends AppCompatActivity {
                     pdfPages.add(bitmap);
                     page.close();
                 }
-
                 pdfRenderer.close();
                 fileDescriptor.close();
 
                 // Update the RecyclerView
                 pdfPageAdapter = new PdfPageAdapter(pdfPages);
                 recyclerView.setAdapter(pdfPageAdapter);
-
-                // Find and store the next PDF using the actual file path (parentDir)
-                findAndStoreNextPdf(uri);
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -160,16 +173,52 @@ public class MainActivity extends AppCompatActivity {
     }
 
 
-
-
-    private void updatePdfListDisplay() {
-        StringBuilder pdfList = new StringBuilder("PDF List:\n");
-        for (Uri uri : pdfUris) {
-            pdfList.append(uri.getLastPathSegment()).append("\n");
-        }
-        pdfListTextView.setText(pdfList.toString());
+    private void appendLogMessage(String message) {
+        logTextView.append(message + "\n");
     }
 
+    private void checkStoragePermission() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
+                != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this,
+                    new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, 1);
+        } else {
+            // If permission is already granted, proceed with listing files
+            //listFilesInDirectory();
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults); // Call the parent method first
+
+        if (requestCode == 1) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                //listFilesInDirectory();  // Permission granted, proceed with listing files
+            } else {
+                Log.d("MainActivity", "Permission denied.");
+            }
+        }
+    }
+
+    private void loadPdfsFromDirectory(Uri directoryUri) {
+        File directory = new File(getRealPathFromURI(directoryUri));
+        if (directory.isDirectory()) {
+            File[] files = directory.listFiles((dir, name) -> name.toLowerCase().endsWith(".pdf")); // Case insensitive
+
+            if (files != null) {
+                for (File file : files) {
+                    appendLogMessage("Found file: " + file.getAbsolutePath());
+                    pdfUris.add(Uri.fromFile(file));
+                }
+                appendLogMessage("Total PDFs available: " + pdfUris.size());
+            } else {
+                appendLogMessage("No PDF files found.");
+            }
+        } else {
+            appendLogMessage("Selected path is not a directory.");
+        }
+    }
 
     private String getRealPathFromURI(Uri contentUri) {
         String[] projection = { MediaStore.Files.FileColumns.DATA };
@@ -184,77 +233,76 @@ public class MainActivity extends AppCompatActivity {
         return null;
     }
 
-    private void findAndStoreNextPdf(Uri currentUri) {
-        String currentFilePath = getRealPathFromURI(currentUri);
-        if (currentFilePath == null) {
-            appendLogMessage("Error retrieving file path.");
-            return;
-        }
 
-        File currentFile = new File(currentFilePath);
-        File parentDir = currentFile.getParentFile();
-
-        if (parentDir != null) {
-            appendLogMessage("findNEXT: Parent Directory: " + parentDir.getAbsolutePath() );
-
-            // Get all PDF files in the directory
-            File[] files = parentDir.listFiles((dir, name) -> true);
-
-            if (files != null && files.length > 0) {
-                appendLogMessage("PDF Files found: " + files.length);
-
-                for (File file : files) {
-                    appendLogMessage("File: " + file.getAbsolutePath());
-                }
-
-                Arrays.sort(files);
-
-                for (int i = 0; i < files.length; i++) {
-                    if (files[i].equals(currentFile)) {
-                        if (i + 1 < files.length) {
-                            Uri nextUri = Uri.fromFile(files[i + 1]);
-                            pdfUris.add(nextUri);
-                            //updatePdfListView();
-                            return;
-                        } else {
-                            appendLogMessage("No next PDF found.");
-                        }
-                    }
-                }
-            } else {
-                appendLogMessage("No PDF files found in the directory.");
-            }
-        } else {
-            appendLogMessage("Error finding parent directory.");
-        }
-    }
-    private void appendLogMessage(String message) {
-        logTextView.append(message + "\n");
+    private void openFolderPicker() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        startActivityForResult(intent, PICK_FOLDER_REQUEST_CODE);
     }
 
-    private void listFilesInDirectory() {
-        //String directoryPath = "/storage/emulated/0/vo-tan-thon-phe"; // Replace with your absolute path
-        String directoryPath = "/Internal storage/vo-tan-thon-phe"; // Replace with your absolute path
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
 
-        File directory = new File(directoryPath);
+        if (requestCode == PICK_FOLDER_REQUEST_CODE && resultCode == RESULT_OK && data != null) {
+            Uri folderUri = data.getData();
+            if (folderUri != null) {
+                getContentResolver().takePersistableUriPermission(folderUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
 
-        if (directory.exists() && directory.isDirectory()) {
-            File[] files = directory.listFiles();
+                // Save the folder URI for future use
+                saveSelectedFolder(folderUri.toString());
 
-            if (files != null && files.length > 0) {
-                StringBuilder fileNames = new StringBuilder();
-                for (File file : files) {
-                    fileNames.append(file.getName()).append("\n");
-                }
-
-                // Update the TextView with the file names
-                TextView textView = findViewById(R.id.logTextView); // Replace with your TextView ID
-                textView.setText(fileNames.toString());
-            } else {
-                appendLogMessage("No files found in the directory.");
+                // List the files in the selected folder
+                listFilesInSelectedFolder(folderUri);
             }
+        }
+    }
+
+    private void saveSelectedFolder(String folderUri) {
+        SharedPreferences sharedPreferences = getSharedPreferences("app_prefs", MODE_PRIVATE);
+        SharedPreferences.Editor editor = sharedPreferences.edit();
+        editor.putString("selected_folder_uri", folderUri);
+        editor.apply();
+    }
+
+    private String getSelectedFolder() {
+        SharedPreferences sharedPreferences = getSharedPreferences("app_prefs", MODE_PRIVATE);
+        return sharedPreferences.getString("selected_folder_uri", null);
+    }
+
+    private void listFilesInSelectedFolder(Uri folderUri) {
+        // Use DocumentFile API to access files in the selected folder
+        DocumentFile folder = DocumentFile.fromTreeUri(this, folderUri);
+        if (folder != null && folder.isDirectory()) {
+            List<String> fileNames = new ArrayList<>();
+            List<Uri> fileUris = new ArrayList<>();
+
+            for (DocumentFile file : folder.listFiles()) {
+                if (file.isFile() && file.getName() != null && file.getName().endsWith(".pdf")) {
+                    // Store file names and URIs
+                    fileNames.add(file.getName());
+                    fileUris.add(file.getUri());
+                }
+            }
+            // Set up the ListView with an ArrayAdapter
+            ListView fileListView = findViewById(R.id.fileListView);
+            ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, fileNames);
+            fileListView.setAdapter(adapter);
+
+            // Set an item click listener
+            fileListView.setOnItemClickListener((parent, view, position, id) -> {
+                // Get the URI of the clicked file
+                Uri selectedFileUri = fileUris.get(position);
+                // Call loadPdf() with the selected file's URI
+                loadPdf(selectedFileUri);
+
+            });
+
+            //pdfUris.clear(); // Clear previous entries
+            pdfUris.addAll(fileUris); // Add new entries
+
         } else {
-            appendLogMessage("Invalid directory path.");
+            Log.d("MainActivity", "No files found in the directory.");
         }
     }
 

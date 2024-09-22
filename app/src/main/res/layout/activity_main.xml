@@ -21,18 +21,23 @@
 
     </ScrollView>
 
+    <ListView
+        android:id="@+id/fileListView"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:dividerHeight="1dp"/>
+
     <TextView
         android:id="@+id/logTextView"
-        android:layout_width="0dp"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
+        android:layout_marginStart="16dp"
         android:layout_marginBottom="16dp"
-        android:padding="8dp"
-        android:background="@android:color/background_light"
-        android:textColor="@android:color/black"
-        app:layout_constraintEnd_toEndOf="parent"
+        android:text="Log"
+        android:gravity="start"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/selectPDF"/>
+        app:layout_constraintBottom_toBottomOf="parent"/>
+
 
     <Button
         android:id="@+id/selectPDF"
