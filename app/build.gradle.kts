@@ -33,6 +33,8 @@ android {
 
 dependencies {
 
+    implementation("com.google.code.gson:gson:2.8.9")
+
     implementation("androidx.recyclerview:recyclerview:1.2.1")
     implementation("androidx.activity:activity-ktx:1.7.0'")
     implementation("androidx.fragment:fragment-ktx:1.7.0")

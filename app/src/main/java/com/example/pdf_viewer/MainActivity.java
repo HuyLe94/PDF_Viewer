@@ -81,19 +81,21 @@ public class MainActivity extends AppCompatActivity {
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
         pdfPages = new ArrayList<>();
         logTextView = findViewById(R.id.logTextView);
+        currentFileTextView = findViewById(R.id.currentFileTextView);
+
 
 
 
         // Check if the activity was started with an intent to view a PDF
-        Intent intent = getIntent();
-        if (intent != null && Intent.ACTION_VIEW.equals(intent.getAction())) {
-            Uri uri = intent.getData();
-            if (uri != null) {
-                pdfUris.add(uri);  // Add the selected PDF URI to the list
-                currentPdfIndex = 0; // Set current index to the first PDF
-                loadPdf(uri); // Load the PDF directly
-            }
-        }
+        //Intent intent = getIntent();
+        //if (intent != null && Intent.ACTION_VIEW.equals(intent.getAction())) {
+        //    Uri uri = intent.getData();
+        //    if (uri != null) {
+        //        //pdfUris.add(uri);  // Add the selected PDF URI to the list
+        //        //currentPdfIndex = 0; // Set current index to the first PDF
+        //        //loadPdf(uri); // Load the PDF directly
+        //    }
+        //}
 
         checkStoragePermission();
         // Set up the buttons
@@ -131,14 +133,6 @@ public class MainActivity extends AppCompatActivity {
         loadPdf(pdfUris.get(currentPdfIndex));
     }
 
-
-
-
-
-
-
-
-
     private void loadPdf(Uri uri) {
 
         try {
@@ -168,6 +162,10 @@ public class MainActivity extends AppCompatActivity {
                 // Update the RecyclerView
                 pdfPageAdapter = new PdfPageAdapter(pdfPages);
                 recyclerView.setAdapter(pdfPageAdapter);
+
+                // Set the text view with the current file name
+                String fileName = uri.getLastPathSegment(); // or any method to get the file name
+                currentFileTextView.setText("Current File: " + fileName);
 
             }
 
@@ -206,39 +204,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void loadPdfsFromDirectory(Uri directoryUri) {
-        File directory = new File(getRealPathFromURI(directoryUri));
-        if (directory.isDirectory()) {
-            File[] files = directory.listFiles((dir, name) -> name.toLowerCase().endsWith(".pdf")); // Case insensitive
-
-            if (files != null) {
-                for (File file : files) {
-                    appendLogMessage("Found file: " + file.getAbsolutePath());
-                    pdfUris.add(Uri.fromFile(file));
-                }
-                appendLogMessage("Total PDFs available: " + pdfUris.size());
-            } else {
-                appendLogMessage("No PDF files found.");
-            }
-        } else {
-            appendLogMessage("Selected path is not a directory.");
-        }
-    }
-
-    private String getRealPathFromURI(Uri contentUri) {
-        String[] projection = { MediaStore.Files.FileColumns.DATA };
-        Cursor cursor = getContentResolver().query(contentUri, projection, null, null, null);
-        if (cursor != null) {
-            int columnIndex = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.DATA);
-            cursor.moveToFirst();
-            String filePath = cursor.getString(columnIndex);
-            cursor.close();
-            return filePath;
-        }
-        return null;
-    }
-
-
     private void openFolderPicker() {
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
@@ -270,11 +235,6 @@ public class MainActivity extends AppCompatActivity {
         editor.apply();
     }
 
-    private String getSelectedFolder() {
-        SharedPreferences sharedPreferences = getSharedPreferences("app_prefs", MODE_PRIVATE);
-        return sharedPreferences.getString("selected_folder_uri", null);
-    }
-
     private void listFilesInSelectedFolder(Uri folderUri) {
         // Use DocumentFile API to access files in the selected folder
         DocumentFile folder = DocumentFile.fromTreeUri(this, folderUri);
@@ -282,11 +242,16 @@ public class MainActivity extends AppCompatActivity {
             List<String> fileNames = new ArrayList<>();
             List<Uri> fileUris = new ArrayList<>();
 
+            int index = 0; // To keep track of the index
             for (DocumentFile file : folder.listFiles()) {
                 if (file.isFile() && file.getName() != null && file.getName().endsWith(".pdf")) {
                     // Store file names and URIs
                     fileNames.add(file.getName());
                     fileUris.add(file.getUri());
+
+                    // Append the file name and index to the logTextView
+                    logTextView.append(index + ": " + file.getName() + "\n");
+                    index++; // Increment the index
                 }
             }
             // Set up the ListView with an ArrayAdapter
@@ -298,9 +263,10 @@ public class MainActivity extends AppCompatActivity {
             fileListView.setOnItemClickListener((parent, view, position, id) -> {
                 // Get the URI of the clicked file
                 Uri selectedFileUri = fileUris.get(position);
+                // Set the current PDF index
+                currentPdfIndex = position;
                 // Call loadPdf() with the selected file's URI
                 loadPdf(selectedFileUri);
-
             });
 
             //pdfUris.clear(); // Clear previous entries
