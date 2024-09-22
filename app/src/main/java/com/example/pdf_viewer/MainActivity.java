@@ -50,7 +50,7 @@ public class MainActivity extends AppCompatActivity {
     private static final int PICK_FOLDER_REQUEST_CODE = 42;
     private int currentPdfResId = R.raw.chapter_1;
     private List<Uri> pdfUris = new ArrayList<>();  // List to hold selected PDF URIs
-    private int currentPdfIndex = 0; // Index of the currently loaded PDF
+    private int currentPdfIndex = 1; // Index of the currently loaded PDF
     private TextView pdfListTextView;
     private RecyclerView recyclerView;
     private PdfPageAdapter pdfPageAdapter;
@@ -81,6 +81,8 @@ public class MainActivity extends AppCompatActivity {
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
         pdfPages = new ArrayList<>();
         logTextView = findViewById(R.id.logTextView);
+        currentFileTextView = findViewById(R.id.currentFileTextView);
+
 
 
 
@@ -116,8 +118,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void loadNextPdf() {
-        if (pdfUris.isEmpty() || currentPdfIndex == -1) {
-            appendLogMessage("No PDFs loaded or invalid current index.");
+        if (pdfUris.isEmpty()) {
+            appendLogMessage("No PDFs loaded.");
             return;
         }
 
@@ -130,6 +132,7 @@ public class MainActivity extends AppCompatActivity {
         appendLogMessage("Loading next PDF at index: " + currentPdfIndex);
         loadPdf(pdfUris.get(currentPdfIndex));
     }
+
 
 
 
@@ -169,6 +172,9 @@ public class MainActivity extends AppCompatActivity {
                 pdfPageAdapter = new PdfPageAdapter(pdfPages);
                 recyclerView.setAdapter(pdfPageAdapter);
 
+                // Update the current file TextView
+                String fileName = uri.getLastPathSegment(); // Extract the file name
+                currentFileTextView.setText("Current File: " + fileName);
             }
 
         } catch (IOException e) {
@@ -294,6 +300,8 @@ public class MainActivity extends AppCompatActivity {
             ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, fileNames);
             fileListView.setAdapter(adapter);
 
+
+
             // Set an item click listener
             fileListView.setOnItemClickListener((parent, view, position, id) -> {
                 // Get the URI of the clicked file
@@ -303,7 +311,7 @@ public class MainActivity extends AppCompatActivity {
 
             });
 
-            //pdfUris.clear(); // Clear previous entries
+            pdfUris.clear(); // Clear previous entries
             pdfUris.addAll(fileUris); // Add new entries
 
         } else {
