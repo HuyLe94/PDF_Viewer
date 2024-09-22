@@ -109,6 +109,8 @@ public class MainActivity extends AppCompatActivity {
         Button openFolderButton = findViewById(R.id.openFolderButton);
         openFolderButton.setOnClickListener(v -> openFolderPicker());
 
+        loadSavedFileAndFolder(); // Load saved file history
+
     }
 
     private void openFilePicker() {
@@ -134,7 +136,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void loadPdf(Uri uri) {
-
         try {
             // Open the PDF and render it
             ParcelFileDescriptor fileDescriptor = getContentResolver().openFileDescriptor(uri, "r");
@@ -142,7 +143,7 @@ public class MainActivity extends AppCompatActivity {
                 PdfRenderer pdfRenderer = new PdfRenderer(fileDescriptor);
                 pdfPages.clear();
 
-                // Add the loaded PDF URI to the list
+                // Add the loaded PDF URI to the list if it's not already there
                 if (!pdfUris.contains(uri)) {
                     pdfUris.add(uri);
                     currentPdfIndex = pdfUris.size() - 1; // Update the current index
@@ -150,7 +151,6 @@ public class MainActivity extends AppCompatActivity {
 
                 for (int i = 0; i < pdfRenderer.getPageCount(); i++) {
                     PdfRenderer.Page page = pdfRenderer.openPage(i);
-
                     Bitmap bitmap = Bitmap.createBitmap(page.getWidth(), page.getHeight(), Bitmap.Config.ARGB_8888);
                     page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY);
                     pdfPages.add(bitmap);
@@ -164,9 +164,11 @@ public class MainActivity extends AppCompatActivity {
                 recyclerView.setAdapter(pdfPageAdapter);
 
                 // Set the text view with the current file name
-                String fileName = uri.getLastPathSegment(); // or any method to get the file name
+                String fileName = uri.getLastPathSegment();
                 currentFileTextView.setText("Current File: " + fileName);
 
+                // Save the current file and folder to SharedPreferences
+                saveCurrentFileAndFolder(uri.toString());
             }
 
         } catch (IOException e) {
@@ -220,7 +222,7 @@ public class MainActivity extends AppCompatActivity {
                 getContentResolver().takePersistableUriPermission(folderUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
 
                 // Save the folder URI for future use
-                saveSelectedFolder(folderUri.toString());
+                //saveSelectedFolder(folderUri.toString());
 
                 // List the files in the selected folder
                 listFilesInSelectedFolder(folderUri);
@@ -277,5 +279,38 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private void loadSavedFileAndFolder() {
+        SharedPreferences sharedPreferences = getSharedPreferences("app_prefs", MODE_PRIVATE);
+        String currentFileUriString = sharedPreferences.getString("current_file_uri", null);
+        int fileCount = sharedPreferences.getInt("file_count", 0);
+        currentPdfIndex = sharedPreferences.getInt("current_pdf_index", 0); // Load the current index
 
+        pdfUris.clear(); // Clear previous URIs
+
+        for (int i = 0; i < fileCount; i++) {
+            String fileUriString = sharedPreferences.getString("file_uri_" + i, null);
+            if (fileUriString != null) {
+                pdfUris.add(Uri.parse(fileUriString));
+            }
+        }
+
+        if (currentFileUriString != null) {
+            Uri currentFileUri = Uri.parse(currentFileUriString);
+            loadPdf(currentFileUri); // Load the last read PDF
+        }
+    }
+
+    private void saveCurrentFileAndFolder(String currentFileUri) {
+        SharedPreferences sharedPreferences = getSharedPreferences("app_prefs", MODE_PRIVATE);
+        SharedPreferences.Editor editor = sharedPreferences.edit();
+        editor.putString("current_file_uri", currentFileUri);
+
+        // Save the list of file URIs
+        for (int i = 0; i < pdfUris.size(); i++) {
+            editor.putString("file_uri_" + i, pdfUris.get(i).toString());
+        }
+        editor.putInt("file_count", pdfUris.size()); // Save the number of files
+        editor.putInt("current_pdf_index", currentPdfIndex); // Save the current index
+        editor.apply();
+    }
 }
