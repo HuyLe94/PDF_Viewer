@@ -6,20 +6,18 @@
     android:layout_height="match_parent"
     tools:context=".MainActivity">
 
-    <ScrollView
-        android:id="@+id/scrollView"
+
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/recyclerView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:fillViewport="true"
+        app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintTop_toTopOf="parent">
+        android:clipToPadding="false"
+        android:padding="16dp"/>
 
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/recyclerView"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"/>
 
-    </ScrollView>
 
     <TextView
         android:id="@+id/logTextView"
@@ -37,8 +35,8 @@
 
     <Button
         android:id="@+id/nextPDF"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_width="50dp"
+        android:layout_height="50dp"
         android:background="@drawable/right_arrow"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintBottom_toBottomOf="parent"/>
@@ -94,6 +92,8 @@
         android:layout_marginTop="100dp"
         android:layout_marginBottom="100dp"
         android:padding="16dp"
+        android:background="#4DBD1B"
+        android:visibility="gone"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"

@@ -10,10 +10,13 @@ import android.graphics.Bitmap;
 import android.graphics.pdf.PdfRenderer;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.ParcelFileDescriptor;
 import android.provider.DocumentsContract;
 import android.provider.MediaStore;
 import android.util.Log;
+import android.view.GestureDetector;
+import android.view.MotionEvent;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
@@ -27,6 +30,7 @@ import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
@@ -67,6 +71,12 @@ public class MainActivity extends AppCompatActivity {
     private int currentBatchIndex = 0; // Track the current batch index
     private List<FileItem> allFileItems = new ArrayList<>(); // Store all file items
     private Dialog dialog; // Member variable to hold the dialog
+    private GestureDetector gestureDetector;
+    private boolean canLoadPdf = true;
+    private boolean isAtBottom = false;
+
+
+
 
 
     // Create the ActivityResultLauncher for selecting a PDF
@@ -95,17 +105,11 @@ public class MainActivity extends AppCompatActivity {
         logTextView = findViewById(R.id.logTextView);
         currentFileTextView = findViewById(R.id.currentFileTextView);
         ListView fileListView = findViewById(R.id.fileListView);
+        //ScrollView scrollView = findViewById(R.id.scrollView);
+        RecyclerView recyclerView = findViewById(R.id.recyclerView);
+        LinearLayoutManager layoutManager = new LinearLayoutManager(this);
+        recyclerView.setLayoutManager(layoutManager);
 
-        //// Check if the activity was started with an intent to view a PDF
-        //Intent intent = getIntent();
-        //if (intent != null && Intent.ACTION_VIEW.equals(intent.getAction())) {
-        //    Uri uri = intent.getData();
-        //    if (uri != null) {
-        //        //pdfUris.add(uri);  // Add the selected PDF URI to the list
-        //        //currentPdfIndex = 0; // Set current index to the first PDF
-        //        //loadPdf(uri); // Load the PDF directly
-        //    }
-        //}
 
         checkStoragePermission();
         // Set up the buttons
@@ -113,7 +117,11 @@ public class MainActivity extends AppCompatActivity {
         selectFileButton.setOnClickListener(v -> openFilePicker());
 
         Button nextPdfButton = findViewById(R.id.nextPDF);
-        nextPdfButton.setOnClickListener(v -> loadNextPdf());
+        nextPdfButton.setOnClickListener(v -> {
+            if (canLoadPdf) {
+                loadNextPdf();
+            }
+        });
 
         Button openFolderButton = findViewById(R.id.folderButton);
         openFolderButton.setOnClickListener(v -> openFolderPicker());
@@ -128,9 +136,31 @@ public class MainActivity extends AppCompatActivity {
                 toggleFileListButton.setText("Show File List");
             }
         });
-        //Button showDialogButton = findViewById(R.id.showDialogButton);
-        //showDialogButton.setOnClickListener(v -> showPopup());
 
+        recyclerView.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrollStateChanged(@NonNull RecyclerView recyclerView, int newState) {
+                super.onScrollStateChanged(recyclerView, newState);
+
+                // Check if we're at the bottom
+                isAtBottom = !recyclerView.canScrollVertically(1); // 1 means down
+            }
+        });
+
+        GestureDetector gestureDetector = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
+            @Override
+            public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX, float velocityY) {
+                if (isAtBottom && (e1.getY() - e2.getY() > 200)) { // Swipe up threshold
+                    loadNextPdf(); // Trigger loading the next PDF
+                    isAtBottom = false;
+                    return true; // Event consumed
+                }
+                return false; // Not consumed
+            }
+        });
+
+// Set a touch listener on the RecyclerView
+        recyclerView.setOnTouchListener((v, event) -> gestureDetector.onTouchEvent(event));
     }
 
     private String getRealPathFromURI(Uri contentUri) {
@@ -155,6 +185,13 @@ public class MainActivity extends AppCompatActivity {
 
 
     private void loadNextPdf() {
+
+        if (!canLoadPdf) {
+            return; // Prevent loading if not allowed
+        }
+
+        canLoadPdf = false;
+
         if (allFileItems.isEmpty() || currentPdfIndex == -1) {
             appendLogMessage("No PDFs loaded or invalid current index.");
             return;
@@ -213,6 +250,8 @@ public class MainActivity extends AppCompatActivity {
             e.printStackTrace();
             Toast.makeText(this, "Error loading PDF: " + e.getMessage(), Toast.LENGTH_SHORT).show();
         }
+
+        canLoadPdf=true;
     }
 
 
@@ -332,6 +371,8 @@ public class MainActivity extends AppCompatActivity {
             ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, new ArrayList<>());
             fileListView.setAdapter(adapter);
 
+            fileListView.setVisibility(View.VISIBLE);
+
             // Load the first batch immediately
             displayNextBatch(adapter);
 
@@ -362,9 +403,6 @@ public class MainActivity extends AppCompatActivity {
             appendLogMessage("No files found in the directory.");
         }
     }
-
-
-
 
     private void displayNextBatch(ArrayAdapter<String> adapter) {
         List<FileItem> batch = getBatch();
