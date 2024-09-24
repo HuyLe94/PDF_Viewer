@@ -1,5 +1,7 @@
 package com.example.pdf_viewer;
 
+import android.app.Dialog;
+import android.content.ContentUris;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
@@ -13,6 +15,7 @@ import android.provider.DocumentsContract;
 import android.provider.MediaStore;
 import android.util.Log;
 import android.view.View;
+import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.ImageView;
@@ -38,6 +41,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import android.Manifest;
 import android.content.pm.PackageManager;
@@ -57,6 +62,11 @@ public class MainActivity extends AppCompatActivity {
     private List<Bitmap> pdfPages;
     private TextView logTextView;
     private TextView currentFileTextView;
+    List<FileItem> fileItems = new ArrayList<>();
+    private static final int BATCH_SIZE = 10; // Number of items to load per batch
+    private int currentBatchIndex = 0; // Track the current batch index
+    private List<FileItem> allFileItems = new ArrayList<>(); // Store all file items
+    private Dialog dialog; // Member variable to hold the dialog
 
 
     // Create the ActivityResultLauncher for selecting a PDF
@@ -65,9 +75,11 @@ public class MainActivity extends AppCompatActivity {
             result -> {
                 if (result.getResultCode() == RESULT_OK && result.getData() != null) {
                     Uri uri = result.getData().getData();
+
                     if (uri != null) {
                         loadPdf(uri);
                     }
+
                 }
             }
     );
@@ -82,11 +94,9 @@ public class MainActivity extends AppCompatActivity {
         pdfPages = new ArrayList<>();
         logTextView = findViewById(R.id.logTextView);
         currentFileTextView = findViewById(R.id.currentFileTextView);
+        ListView fileListView = findViewById(R.id.fileListView);
 
-
-
-
-        // Check if the activity was started with an intent to view a PDF
+        //// Check if the activity was started with an intent to view a PDF
         //Intent intent = getIntent();
         //if (intent != null && Intent.ACTION_VIEW.equals(intent.getAction())) {
         //    Uri uri = intent.getData();
@@ -99,16 +109,41 @@ public class MainActivity extends AppCompatActivity {
 
         checkStoragePermission();
         // Set up the buttons
-        Button selectFileButton = findViewById(R.id.selectPDF);
+        Button selectFileButton = findViewById(R.id.fileButton);
         selectFileButton.setOnClickListener(v -> openFilePicker());
 
         Button nextPdfButton = findViewById(R.id.nextPDF);
         nextPdfButton.setOnClickListener(v -> loadNextPdf());
 
-
-        Button openFolderButton = findViewById(R.id.openFolderButton);
+        Button openFolderButton = findViewById(R.id.folderButton);
         openFolderButton.setOnClickListener(v -> openFolderPicker());
 
+        Button toggleFileListButton = findViewById(R.id.toggleFileListButton);
+        toggleFileListButton.setOnClickListener(v -> {
+            if (fileListView.getVisibility() == View.GONE) {
+                fileListView.setVisibility(View.VISIBLE);
+                toggleFileListButton.setText("Hide File List");
+            } else {
+                fileListView.setVisibility(View.GONE);
+                toggleFileListButton.setText("Show File List");
+            }
+        });
+        //Button showDialogButton = findViewById(R.id.showDialogButton);
+        //showDialogButton.setOnClickListener(v -> showPopup());
+
+    }
+
+    private String getRealPathFromURI(Uri contentUri) {
+        String[] projection = { MediaStore.Files.FileColumns.DATA };
+        Cursor cursor = getContentResolver().query(contentUri, projection, null, null, null);
+        if (cursor != null) {
+            int columnIndex = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.DATA);
+            cursor.moveToFirst();
+            String filePath = cursor.getString(columnIndex);
+            cursor.close();
+            return filePath;
+        }
+        return null;
     }
 
     private void openFilePicker() {
@@ -117,21 +152,32 @@ public class MainActivity extends AppCompatActivity {
         selectPdfLauncher.launch(Intent.createChooser(intent, "Select PDF"));
     }
 
+
+
     private void loadNextPdf() {
-        if (pdfUris.isEmpty() || currentPdfIndex == -1) {
+        if (allFileItems.isEmpty() || currentPdfIndex == -1) {
             appendLogMessage("No PDFs loaded or invalid current index.");
             return;
         }
 
         // Increment the current index
         currentPdfIndex++;
-        if (currentPdfIndex >= pdfUris.size()) {
+
+        //appendLogMessage("Index after: "+currentPdfIndex);
+        // Ensure current index is valid
+        if (currentPdfIndex >= allFileItems.size()) {
             currentPdfIndex = 0; // Loop back to the first PDF
         }
 
         appendLogMessage("Loading next PDF at index: " + currentPdfIndex);
-        loadPdf(pdfUris.get(currentPdfIndex));
+        Uri nextPdfUri = allFileItems.get(currentPdfIndex).uri; // Get URI from FileItem
+        loadPdf(nextPdfUri);
+
+        // Log the current state
+        appendLogMessage("Current PDF URI: " + nextPdfUri.toString());
     }
+
+
 
     private void loadPdf(Uri uri) {
 
@@ -141,12 +187,6 @@ public class MainActivity extends AppCompatActivity {
             if (fileDescriptor != null) {
                 PdfRenderer pdfRenderer = new PdfRenderer(fileDescriptor);
                 pdfPages.clear();
-
-                // Add the loaded PDF URI to the list
-                if (!pdfUris.contains(uri)) {
-                    pdfUris.add(uri);
-                    currentPdfIndex = pdfUris.size() - 1; // Update the current index
-                }
 
                 for (int i = 0; i < pdfRenderer.getPageCount(); i++) {
                     PdfRenderer.Page page = pdfRenderer.openPage(i);
@@ -174,6 +214,7 @@ public class MainActivity extends AppCompatActivity {
             Toast.makeText(this, "Error loading PDF: " + e.getMessage(), Toast.LENGTH_SHORT).show();
         }
     }
+
 
 
     private void appendLogMessage(String message) {
@@ -235,47 +276,117 @@ public class MainActivity extends AppCompatActivity {
         editor.apply();
     }
 
+
+    private String getPathFromUri(Uri uri) {
+        String path = null;
+
+        // Check if the URI is a file URI
+        if ("file".equalsIgnoreCase(uri.getScheme())) {
+            path = uri.getPath(); // Directly get the path from URI
+        } else if ("content".equalsIgnoreCase(uri.getScheme())) {
+            // Use a content resolver to query the URI
+            String[] projection = { MediaStore.Files.FileColumns.DATA };
+
+            try (Cursor cursor = getContentResolver().query(uri, projection, null, null, null)) {
+                if (cursor != null && cursor.moveToFirst()) {
+                    int columnIndex = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.DATA);
+                    path = cursor.getString(columnIndex);
+                }
+            } catch (Exception e) {
+                e.printStackTrace(); // Log the exception
+            }
+        }
+
+        // Log the resulting path or failure
+        if (path == null) {
+            appendLogMessage("Failed to get path from URI: " + uri.toString());
+        } else {
+            appendLogMessage("Successfully retrieved path: " + path);
+        }
+
+        return path;
+    }
+
+
+
     private void listFilesInSelectedFolder(Uri folderUri) {
         // Use DocumentFile API to access files in the selected folder
         DocumentFile folder = DocumentFile.fromTreeUri(this, folderUri);
         if (folder != null && folder.isDirectory()) {
-            List<String> fileNames = new ArrayList<>();
-            List<Uri> fileUris = new ArrayList<>();
+            // Clear previous entries
+            allFileItems.clear();
 
-            int index = 0; // To keep track of the index
+            // Load all file items into the list
             for (DocumentFile file : folder.listFiles()) {
                 if (file.isFile() && file.getName() != null && file.getName().endsWith(".pdf")) {
-                    // Store file names and URIs
-                    fileNames.add(file.getName());
-                    fileUris.add(file.getUri());
-
-                    // Append the file name and index to the logTextView
-                    logTextView.append(index + ": " + file.getName() + "\n");
-                    index++; // Increment the index
+                    allFileItems.add(new FileItem(file.getName(), file.getUri()));
+                    appendLogMessage("File Order: Adding file: " + file.getName());
                 }
             }
-            // Set up the ListView with an ArrayAdapter
+
+            // Sort all file items
+            FileItem.sortFileItems(allFileItems);
+
+            // Set up the ListView
             ListView fileListView = findViewById(R.id.fileListView);
-            ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, fileNames);
+            ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, new ArrayList<>());
             fileListView.setAdapter(adapter);
+
+            // Load the first batch immediately
+            displayNextBatch(adapter);
+
+            // Continue loading more batches in the background
+            new Thread(() -> {
+                while (currentBatchIndex < allFileItems.size()) {
+                    try {
+                        Thread.sleep(500); // Optional delay for demonstration, adjust as needed
+                        displayNextBatch(adapter); // Load the next batch
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }).start();
 
             // Set an item click listener
             fileListView.setOnItemClickListener((parent, view, position, id) -> {
-                // Get the URI of the clicked file
-                Uri selectedFileUri = fileUris.get(position);
-                // Set the current PDF index
-                currentPdfIndex = position;
-                // Call loadPdf() with the selected file's URI
-                loadPdf(selectedFileUri);
+                // Make sure the selected position is valid
+                if (position < allFileItems.size()) {
+                    Uri selectedFileUri = allFileItems.get(position).uri; // Use position from the loaded adapter
+                    currentPdfIndex = position; // Update current index based on loaded items
+                    loadPdf(selectedFileUri); // Load the selected PDF
+                    fileListView.setVisibility(View.GONE);
+                }
             });
 
-            //pdfUris.clear(); // Clear previous entries
-            pdfUris.addAll(fileUris); // Add new entries
-
         } else {
-            Log.d("MainActivity", "No files found in the directory.");
+            appendLogMessage("No files found in the directory.");
         }
     }
 
+
+
+
+    private void displayNextBatch(ArrayAdapter<String> adapter) {
+        List<FileItem> batch = getBatch();
+
+        // Check if batch is empty
+        if (batch.isEmpty()) return;
+
+        // Extract names for the current batch and add to adapter
+        runOnUiThread(() -> {
+            for (FileItem item : batch) {
+                adapter.add(item.name);
+            }
+            adapter.notifyDataSetChanged(); // Notify the adapter of data changes
+        });
+
+        // Increment the batch index for the next load
+        currentBatchIndex += BATCH_SIZE;
+    }
+
+    private List<FileItem> getBatch() {
+        int endIndex = Math.min(currentBatchIndex + BATCH_SIZE, allFileItems.size());
+        return allFileItems.subList(currentBatchIndex, endIndex);
+    }
 
 }
