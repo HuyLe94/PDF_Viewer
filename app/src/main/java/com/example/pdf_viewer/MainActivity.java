@@ -9,6 +9,7 @@ import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.pdf.PdfRenderer;
 import android.net.Uri;
+import android.nfc.Tag;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.ParcelFileDescriptor;
@@ -39,10 +40,14 @@ import androidx.documentfile.provider.DocumentFile;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -53,28 +58,30 @@ import android.content.pm.PackageManager;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
 public class MainActivity extends AppCompatActivity {
 
     private static final int REQUEST_CODE_OPEN_DOCUMENT = 1;
     private static final int PICK_FOLDER_REQUEST_CODE = 42;
     private int currentPdfResId = R.raw.chapter_1;
-    private List<Uri> pdfUris = new ArrayList<>();  // List to hold selected PDF URIs
     private int currentPdfIndex = 0; // Index of the currently loaded PDF
-    private TextView pdfListTextView;
     private RecyclerView recyclerView;
     private PdfPageAdapter pdfPageAdapter;
     private List<Bitmap> pdfPages;
     private TextView logTextView;
     private TextView currentFileTextView;
-    List<FileItem> fileItems = new ArrayList<>();
     private static final int BATCH_SIZE = 10; // Number of items to load per batch
     private int currentBatchIndex = 0; // Track the current batch index
-    private List<FileItem> allFileItems = new ArrayList<>(); // Store all file items
-    private Dialog dialog; // Member variable to hold the dialog
+    private List<FolderFileManager.FileItem> allFileItems = new ArrayList<>(); // Store all file items
     private GestureDetector gestureDetector;
     private boolean canLoadPdf = true;
     private boolean isAtBottom = false;
-
+    private FolderFileManager folderFileManager;
+    private Button showFolderButton;
+    private ListView folderListView;
 
 
 
@@ -113,8 +120,10 @@ public class MainActivity extends AppCompatActivity {
 
         checkStoragePermission();
         // Set up the buttons
-        Button selectFileButton = findViewById(R.id.fileButton);
-        selectFileButton.setOnClickListener(v -> openFilePicker());
+        //Button selectFileButton = findViewById(R.id.fileButton);
+        //selectFileButton.setOnClickListener(v -> openFilePicker());
+
+        loadJsonFiles();
 
         Button nextPdfButton = findViewById(R.id.nextPDF);
         nextPdfButton.setOnClickListener(v -> {
@@ -126,6 +135,10 @@ public class MainActivity extends AppCompatActivity {
         Button openFolderButton = findViewById(R.id.folderButton);
         openFolderButton.setOnClickListener(v -> openFolderPicker());
 
+        Button deleteAllJsonButton = findViewById(R.id.deleteJson);
+        deleteAllJsonButton.setOnClickListener(v -> deleteAllJsonFiles());
+
+
         Button toggleFileListButton = findViewById(R.id.toggleFileListButton);
         toggleFileListButton.setOnClickListener(v -> {
             if (fileListView.getVisibility() == View.GONE) {
@@ -136,6 +149,10 @@ public class MainActivity extends AppCompatActivity {
                 toggleFileListButton.setText("Show File List");
             }
         });
+
+        showFolderButton = findViewById(R.id.showFolder);
+        folderListView = findViewById(R.id.folderListView);
+        showFolderButton.setOnClickListener(v -> toggleFolderListVisibility());
 
         recyclerView.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override
@@ -159,6 +176,38 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
+        // When an item is clicked in folderListView
+        folderListView.setOnItemClickListener((parent, view, position, id) -> {
+            // Get the selected folder name from the list (which should be the JSON file name)
+            String selectedJsonFile = (String) parent.getItemAtPosition(position);
+
+            // Construct the JSON file path (assuming JSON files are stored in the app's internal files directory)
+            String jsonFilePath = new File(getFilesDir(), selectedJsonFile).getAbsolutePath();
+
+            // Debugging Log to ensure the correct file path is being used
+            Log.d("SelectedJsonFilePath", "Path: " + jsonFilePath);
+
+            // Load the file items from the JSON file
+            List<FolderFileManager.FileItem> allFileItems = loadFileItemsFromJson(jsonFilePath);
+
+            // Check if fileItems are null or empty and handle the case
+            if (allFileItems != null && !allFileItems.isEmpty()) {
+                // Pass the fileItems list to the function to display in the ListView
+                pickChapterFromList(allFileItems);
+                folderListView.setVisibility(View.INVISIBLE);
+            } else {
+                // Log or notify the user if no items are found
+                Log.d("FileItemsError", "No items found in the JSON file.");
+                Toast.makeText(this, "No items found in the selected folder", Toast.LENGTH_SHORT).show();
+            }
+        });
+
+
+
+
+
+
+
 // Set a touch listener on the RecyclerView
         recyclerView.setOnTouchListener((v, event) -> gestureDetector.onTouchEvent(event));
     }
@@ -176,12 +225,19 @@ public class MainActivity extends AppCompatActivity {
         return null;
     }
 
+    private void toggleFolderListVisibility() {
+        if (folderListView.getVisibility() == View.GONE) {
+            folderListView.setVisibility(View.VISIBLE);
+        } else {
+            folderListView.setVisibility(View.GONE);
+        }
+    }
+
     private void openFilePicker() {
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.setType("application/pdf");
         selectPdfLauncher.launch(Intent.createChooser(intent, "Select PDF"));
     }
-
 
 
     private void loadNextPdf() {
@@ -206,12 +262,12 @@ public class MainActivity extends AppCompatActivity {
             currentPdfIndex = 0; // Loop back to the first PDF
         }
 
-        appendLogMessage("Loading next PDF at index: " + currentPdfIndex);
+        //appendLogMessage("Loading next PDF at index: " + currentPdfIndex);
         Uri nextPdfUri = allFileItems.get(currentPdfIndex).uri; // Get URI from FileItem
         loadPdf(nextPdfUri);
 
         // Log the current state
-        appendLogMessage("Current PDF URI: " + nextPdfUri.toString());
+        //appendLogMessage("Current PDF URI: " + nextPdfUri.toString());
     }
 
 
@@ -300,19 +356,12 @@ public class MainActivity extends AppCompatActivity {
                 getContentResolver().takePersistableUriPermission(folderUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
 
                 // Save the folder URI for future use
-                saveSelectedFolder(folderUri.toString());
+                //saveSelectedFolder(folderUri.toString());
 
                 // List the files in the selected folder
-                listFilesInSelectedFolder(folderUri);
+                readAndSaveFolderInfo(folderUri);
             }
         }
-    }
-
-    private void saveSelectedFolder(String folderUri) {
-        SharedPreferences sharedPreferences = getSharedPreferences("app_prefs", MODE_PRIVATE);
-        SharedPreferences.Editor editor = sharedPreferences.edit();
-        editor.putString("selected_folder_uri", folderUri);
-        editor.apply();
     }
 
 
@@ -338,13 +387,216 @@ public class MainActivity extends AppCompatActivity {
 
         // Log the resulting path or failure
         if (path == null) {
-            appendLogMessage("Failed to get path from URI: " + uri.toString());
+            //appendLogMessage("Failed to get path from URI: " + uri.toString());
         } else {
             appendLogMessage("Successfully retrieved path: " + path);
         }
 
         return path;
     }
+
+    private void readAndSaveFolderInfo(Uri folderUri) {
+        DocumentFile folder = DocumentFile.fromTreeUri(this, folderUri);
+        if (folder != null && folder.isDirectory()) {
+            // Clear previous entries
+            allFileItems.clear();
+
+            // Load all file items into the list
+            for (DocumentFile file : folder.listFiles()) {
+                if (file.isFile() && file.getName() != null && file.getName().endsWith(".pdf")) {
+                    allFileItems.add(new FolderFileManager.FileItem(file.getName(), file.getUri())); // Use FolderFileManager.FileItem
+                    appendLogMessage("File Order: Adding file: " + file.getName());
+                }
+            }
+
+            // Sort all file items using the method from FolderFileManager
+            String folderName = folder.getName(); // Get the name of the folder
+            FolderFileManager fileManager = new FolderFileManager(folderName, folderUri.toString()); // Use the actual folder name
+            fileManager.sortFileItems(allFileItems); // Sort the file items
+
+            // Prepare the data for JSON
+            String folderPath = folderUri.toString(); // Get the folder URI as a string
+            List<FolderFileManager.FileItem> itemsToSave = new ArrayList<>(allFileItems);
+
+            // Save the folder information as JSON
+            saveFolderInfoAsJson(folderName, folderPath, itemsToSave);
+            loadJsonFiles();
+
+        } else {
+            appendLogMessage("No files found in the directory.");
+        }
+    }
+
+
+    private void saveFolderInfoAsJson(String folderName, String folderPath, List<FolderFileManager.FileItem> items) {
+        // Create a JSONObject to hold folder information
+        JSONObject folderInfo = new JSONObject();
+        try {
+            folderInfo.put("folderName", folderName);
+            folderInfo.put("folderPath", folderPath);
+
+            // Create a JSONArray to hold file items
+            JSONArray filesArray = new JSONArray();
+            for (FolderFileManager.FileItem item : items) {
+                // Create a new JSONObject for each file item
+                JSONObject fileObject = new JSONObject();
+
+                // Put the file name into the JSON object
+                fileObject.put("fileName", item.name);
+
+                // Convert the URI to a String and log it before adding to the JSON object
+                String uriString = item.uri.toString();
+                //Log.d("fileURIBefore", uriString); // Log the URI before adding to JSON
+
+                // Add the URI to the JSON object
+                fileObject.put("fileUri", uriString);
+
+                // Log the file URI inside the JSON object to confirm its structure
+                //Log.d("fileURIInJSON", fileObject.getString("fileUri")); // Log the URI in the JSON object
+
+                // Add the JSON object to the files array
+                filesArray.put(fileObject);
+
+                // Log the entire contents of the files array after adding the new JSON object
+                //Log.d("filesURIinArrayContent", filesArray.toString()); // Log the contents of the JSON array
+            }
+
+
+            folderInfo.put("files", filesArray);
+
+            // Save the JSON to a file in app storage
+            File file = new File(getFilesDir(), folderName + "_info.json"); // File name can be customized
+            FileWriter writer = new FileWriter(file);
+            writer.write(folderInfo.toString());
+            writer.flush();
+            writer.close();
+
+
+            appendLogMessage("Folder info saved to JSON: " + file.getAbsolutePath());
+        } catch (JSONException | IOException e) {
+            appendLogMessage("Error saving folder info to JSON: " + e.getMessage());
+        }
+    }
+
+    private void deleteAllJsonFiles() {
+        File dir = getFilesDir(); // Get the directory where JSON files are stored
+        File[] jsonFiles = dir.listFiles((d, name) -> name.endsWith(".json")); // Filter for JSON files
+
+        if (jsonFiles != null && jsonFiles.length > 0) {
+            for (File jsonFile : jsonFiles) {
+                if (jsonFile.delete()) {
+                    appendLogMessage("Deleted JSON file: " + jsonFile.getName());
+                } else {
+                    appendLogMessage("Failed to delete JSON file: " + jsonFile.getName());
+                }
+            }
+            // Optionally, refresh the folder list view after deletion
+            loadJsonFiles(); // Call your method to reload the list of JSON files
+        } else {
+            appendLogMessage("No JSON files found to delete.");
+        }
+    }
+
+    private List<FolderFileManager.FileItem> loadFileItemsFromJson(String jsonFilePath) {
+        //List<FolderFileManager.FileItem> fileItems = new ArrayList<>();
+        Log.d("readingJsonItems", "Enter reading");
+
+        try {
+            Log.d("readingJsonItems", "Attempting to open file at: " + jsonFilePath);
+
+            // Read the JSON file
+            FileInputStream fis = new FileInputStream(jsonFilePath);
+            InputStreamReader isr = new InputStreamReader(fis);
+            BufferedReader bufferedReader = new BufferedReader(isr);
+            StringBuilder stringBuilder = new StringBuilder();
+            String line;
+
+            while ((line = bufferedReader.readLine()) != null) {
+                stringBuilder.append(line);
+            }
+
+            // Close the resources
+            bufferedReader.close();
+            isr.close();
+            fis.close();
+
+            // Parse the JSON
+            String jsonData = stringBuilder.toString();
+            Log.d("readingJsonItems", "JSON Data: " + jsonData); // Log the raw JSON data
+
+            JSONObject jsonObject = new JSONObject(jsonData); // Try to create a JSONObject
+            JSONArray jsonArray = jsonObject.getJSONArray("files"); // Get the "files" array
+
+            Log.d("readingJsonItems", "Enter reading 3");
+
+            // Convert each JSON object to FileItem and add to the list
+            for (int i = 0; i < jsonArray.length(); i++) {
+                JSONObject fileObject = jsonArray.getJSONObject(i);
+                String name = fileObject.getString("fileName"); // Use correct key
+                String uriString = fileObject.getString("fileUri"); // Use correct key
+                Log.d("readingJsonItems", "File Item: " + name + " - " + uriString);
+                Uri uri = Uri.parse(uriString);
+
+                allFileItems.add(new FolderFileManager.FileItem(name, uri));
+            }
+
+        } catch (IOException e) {
+            Log.e("readingJsonItems", "IOException while reading JSON file: " + e.getMessage());
+        } catch (JSONException e) {
+            Log.e("readingJsonItems", "JSONException while parsing JSON: " + e.getMessage());
+        }
+
+        return allFileItems;
+    }
+
+
+
+
+    private void pickChapterFromList(List<FolderFileManager.FileItem> fileItems) {
+
+        appendLogMessage("PickChapter"+ "File Items Size: " + fileItems.size());
+
+        // Set up the ListView
+        ListView fileListView = findViewById(R.id.fileListView);
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, new ArrayList<>());
+        fileListView.setAdapter(adapter);
+
+        fileListView.setVisibility(View.VISIBLE);
+
+        // Clear any previous items
+        adapter.clear();
+
+        // Add items to the adapter
+        for (FolderFileManager.FileItem item : fileItems) {
+            //appendLogMessage("FileItem"+ "Name: " + item.name + ", URI: " + item.uri);
+            adapter.add(item.name);
+        }
+
+
+        // Continue loading more batches in the background if needed
+        new Thread(() -> {
+            while (currentBatchIndex < adapter.getCount()) {
+                try {
+                    Thread.sleep(500); // Optional delay for demonstration, adjust as needed
+                    // You might want to implement batch loading if your list is large
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        }).start();
+
+        // Set an item click listener
+        fileListView.setOnItemClickListener((parent, view, position, id) -> {
+            // Make sure the selected position is valid
+            if (position < fileItems.size()) {
+                Uri selectedFileUri = fileItems.get(position).uri; // Use position from the loaded adapter
+                currentPdfIndex = position; // Update current index based on loaded items
+                loadPdf(selectedFileUri); // Load the selected PDF
+                fileListView.setVisibility(View.GONE);
+            }
+        });
+    }
+
 
 
 
@@ -358,13 +610,15 @@ public class MainActivity extends AppCompatActivity {
             // Load all file items into the list
             for (DocumentFile file : folder.listFiles()) {
                 if (file.isFile() && file.getName() != null && file.getName().endsWith(".pdf")) {
-                    allFileItems.add(new FileItem(file.getName(), file.getUri()));
+                    allFileItems.add(new FolderFileManager.FileItem(file.getName(), file.getUri())); // Update to use FolderFileManager.FileItem
                     appendLogMessage("File Order: Adding file: " + file.getName());
                 }
             }
 
-            // Sort all file items
-            FileItem.sortFileItems(allFileItems);
+            // Sort all file items using the method from FolderFileManager
+            String folderName = folder.getName(); // Get the name of the folder
+            FolderFileManager fileManager = new FolderFileManager(folderName, folderUri.toString()); // Use the actual folder name
+            fileManager.sortFileItems(allFileItems); // Sort the file items
 
             // Set up the ListView
             ListView fileListView = findViewById(R.id.fileListView);
@@ -404,15 +658,41 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void displayNextBatch(ArrayAdapter<String> adapter) {
-        List<FileItem> batch = getBatch();
+    private void loadJsonFiles() {
 
-        // Check if batch is empty
+
+        // Assuming the JSON files are stored in the app's internal storage
+        File dir = getFilesDir(); // Get the internal storage directory
+        File[] files = dir.listFiles((d, name) -> name.endsWith(".json")); // Filter for JSON files
+
+        // Clear the previous entries
+        List<String> jsonFileNames = new ArrayList<>();
+
+        if (files != null) {
+            for (File file : files) {
+                jsonFileNames.add(file.getName()); // Add the name of each JSON file
+            }
+        }
+
+        // Set up the adapter for the ListView
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, jsonFileNames);
+        ListView folderListView = findViewById(R.id.folderListView);
+        folderListView.setAdapter(adapter);
+
+    }
+
+
+
+    private void displayNextBatch(ArrayAdapter<String> adapter) {
+        // Retrieve the batch of FileItem objects from FolderFileManager
+        List<FolderFileManager.FileItem> batch = getBatch();
+
+        // Check if the batch is empty
         if (batch.isEmpty()) return;
 
-        // Extract names for the current batch and add to adapter
+        // Extract names for the current batch and add to the adapter
         runOnUiThread(() -> {
-            for (FileItem item : batch) {
+            for (FolderFileManager.FileItem item : batch) {
                 adapter.add(item.name);
             }
             adapter.notifyDataSetChanged(); // Notify the adapter of data changes
@@ -422,9 +702,12 @@ public class MainActivity extends AppCompatActivity {
         currentBatchIndex += BATCH_SIZE;
     }
 
-    private List<FileItem> getBatch() {
+
+    private List<FolderFileManager.FileItem> getBatch() {
         int endIndex = Math.min(currentBatchIndex + BATCH_SIZE, allFileItems.size());
         return allFileItems.subList(currentBatchIndex, endIndex);
     }
+
+
 
 }

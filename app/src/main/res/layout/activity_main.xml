@@ -56,7 +56,7 @@
         android:id="@+id/folderButton"
         android:layout_width="50dp"
         android:layout_height="50dp"
-        android:background="@drawable/folder"
+        android:background="@drawable/add_folder"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintHorizontal_chainStyle="packed"
@@ -64,10 +64,10 @@
 
 
     <Button
-        android:id="@+id/fileButton"
+        android:id="@+id/showFolder"
         android:layout_width="50dp"
         android:layout_height="50dp"
-        android:background="@drawable/file"
+        android:background="@drawable/folder"
         app:layout_constraintTop_toBottomOf="@+id/folderButton"
         app:layout_constraintRight_toRightOf="parent"
         android:layout_marginEnd="8dp"
@@ -81,7 +81,30 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintLeft_toLeftOf="parent"/>
 
+    <Button
+        android:id="@+id/deleteJson"
+        android:layout_width="50dp"
+        android:layout_height="50dp"
+        android:background="@drawable/delete"
+        android:visibility="gone"
+        app:layout_constraintBottom_toTopOf="@+id/toggleFileListButton"
+        app:layout_constraintLeft_toLeftOf="parent"/>
 
+    <ListView
+        android:id="@+id/folderListView"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_marginStart="0dp"
+        android:layout_marginEnd="200dp"
+        android:layout_marginTop="20dp"
+        android:layout_marginBottom="200dp"
+        android:padding="16dp"
+        android:background="#4DBD1B"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
 
     <ListView
         android:id="@+id/fileListView"
