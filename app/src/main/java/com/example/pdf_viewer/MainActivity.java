@@ -3,6 +3,7 @@ package com.example.pdf_viewer;
 
 import android.content.Intent;
 
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.graphics.Bitmap;
@@ -49,7 +50,6 @@ public class MainActivity extends AppCompatActivity {
 
     private static final int REQUEST_CODE_OPEN_DOCUMENT = 1;
     private static final int PICK_FOLDER_REQUEST_CODE = 42;
-    private int currentPdfResId = R.raw.chapter_1;
     private int currentPdfIndex = 0; // Index of the currently loaded PDF
     private RecyclerView recyclerView;
     private PdfPageAdapter pdfPageAdapter;
@@ -79,6 +79,7 @@ public class MainActivity extends AppCompatActivity {
             }
     );
 
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -102,6 +103,9 @@ public class MainActivity extends AppCompatActivity {
 
         loadJsonFiles();
 
+        restoreStateFromSharedPreferences();
+        fileListView.setVisibility(View.GONE);
+
         Button nextPdfButton = findViewById(R.id.nextPDF);
         nextPdfButton.setOnClickListener(v -> {
             if (canLoadPdf) {
@@ -117,7 +121,7 @@ public class MainActivity extends AppCompatActivity {
         //deleteAllJsonButton.setOnClickListener(v -> updateFolders());
 
         Button updateAllJsonButton = findViewById(R.id.updateJson);
-        updateAllJsonButton.setOnClickListener(v ->  updateFolders());
+        updateAllJsonButton.setOnClickListener(v -> updateFolders());
 
         Button toggleFileListButton = findViewById(R.id.toggleFileListButton);
         toggleFileListButton.setOnClickListener(v -> {
@@ -285,6 +289,7 @@ public class MainActivity extends AppCompatActivity {
             //Toast.makeText(this, "Error loading PDF: " + e.getMessage(), Toast.LENGTH_SHORT).show();
         }
 
+        saveStateToSharedPreferences();
         canLoadPdf = true;
     }
 
@@ -771,6 +776,95 @@ public class MainActivity extends AppCompatActivity {
             }
         } else {
             Log.w("Updating", "No JSON files found for updating.");
+        }
+    }
+
+    private void saveStateToSharedPreferences() {
+        SharedPreferences prefs = getSharedPreferences("AppState", MODE_PRIVATE);
+        SharedPreferences.Editor editor = prefs.edit();
+
+        // Save current PDF index
+        editor.putInt("currentPdfIndex", currentPdfIndex);
+
+        // Save the `allFileItems` array
+        JSONArray allFilesArray = new JSONArray();
+        for (FolderFileManager.FileItem item : allFileItems) {
+            JSONObject fileObject = new JSONObject();
+            try {
+                fileObject.put("fileName", item.name);
+                fileObject.put("fileUri", item.uri.toString());
+                allFilesArray.put(fileObject);
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+        }
+        editor.putString("allFileItems", allFilesArray.toString());
+
+        // Save the `fileItems` used in the ListView (subset of all files)
+        JSONArray fileItemsArray = new JSONArray();
+        for (FolderFileManager.FileItem item : allFileItems) {
+            JSONObject fileObject = new JSONObject();
+            try {
+                fileObject.put("fileName", item.name);
+                fileObject.put("fileUri", item.uri.toString());
+                fileItemsArray.put(fileObject);
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+        }
+        editor.putString("fileItems", fileItemsArray.toString());
+
+        // Apply changes
+        editor.apply();
+    }
+
+    private void restoreStateFromSharedPreferences() {
+        SharedPreferences prefs = getSharedPreferences("AppState", MODE_PRIVATE);
+
+        // Restore current PDF index
+        currentPdfIndex = prefs.getInt("currentPdfIndex", 0);
+
+        // Restore allFileItems
+        String allFilesJson = prefs.getString("allFileItems", null);
+        if (allFilesJson != null) {
+            try {
+                JSONArray allFilesArray = new JSONArray(allFilesJson);
+                allFileItems.clear();
+                for (int i = 0; i < allFilesArray.length(); i++) {
+                    JSONObject fileObject = allFilesArray.getJSONObject(i);
+                    String fileName = fileObject.getString("fileName");
+                    Uri fileUri = Uri.parse(fileObject.getString("fileUri"));
+                    allFileItems.add(new FolderFileManager.FileItem(fileName, fileUri));
+                }
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+        }
+
+        // Restore fileItems (ListView content)
+        String fileItemsJson = prefs.getString("fileItems", null);
+        if (fileItemsJson != null) {
+            try {
+                JSONArray fileItemsArray = new JSONArray(fileItemsJson);
+                allFileItems.clear();
+                for (int i = 0; i < fileItemsArray.length(); i++) {
+                    JSONObject fileObject = fileItemsArray.getJSONObject(i);
+                    String fileName = fileObject.getString("fileName");
+                    Uri fileUri = Uri.parse(fileObject.getString("fileUri"));
+                    allFileItems.add(new FolderFileManager.FileItem(fileName, fileUri));
+                }
+
+                // Repopulate the ListView with restored items
+                pickChapterFromList(allFileItems);
+
+                // Load the PDF at the restored index
+                if (currentPdfIndex < allFileItems.size()) {
+                    loadPdf(allFileItems.get(currentPdfIndex).uri);
+                }
+
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
         }
     }
 
