@@ -544,6 +544,7 @@ public class MainActivity extends AppCompatActivity {
                 String uriString = fileObject.getString("fileUri"); // Use correct key
                 Uri uri = Uri.parse(uriString);
                 folderFileManager.addFileItem(new FolderFileManager.FileItem(name, uri)); // Add FileItem to FolderFileManager
+                allFileItems.add(new FolderFileManager.FileItem(name, uri));
             }
         } catch (IOException e) {
             // Handle exception
