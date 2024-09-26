@@ -86,7 +86,18 @@
         android:layout_width="50dp"
         android:layout_height="50dp"
         android:background="@drawable/delete"
-        android:visibility="gone"
+        android:visibility="visible"
+        android:layout_marginBottom="100dp"
+        app:layout_constraintBottom_toTopOf="@id/updateJson"
+        app:layout_constraintLeft_toLeftOf="parent"/>
+
+    <Button
+        android:id="@+id/updateJson"
+        android:layout_width="50dp"
+        android:layout_height="50dp"
+        android:background="@drawable/update"
+        android:visibility="visible"
+        android:layout_marginBottom="100dp"
         app:layout_constraintBottom_toTopOf="@+id/toggleFileListButton"
         app:layout_constraintLeft_toLeftOf="parent"/>
 
