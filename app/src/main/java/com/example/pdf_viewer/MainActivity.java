@@ -274,9 +274,16 @@ public class MainActivity extends AppCompatActivity {
                 pdfRenderer.close();
                 fileDescriptor.close();
 
-                // Update the RecyclerView
-                pdfPageAdapter = new PdfPageAdapter(pdfPages);
-                recyclerView.setAdapter(pdfPageAdapter);
+                if (pdfPageAdapter == null) {
+                    // Create a new adapter if it doesn't exist
+                    pdfPageAdapter = new PdfPageAdapter(pdfPages);
+                    recyclerView.setAdapter(pdfPageAdapter);
+                } else {
+                    // If the adapter already exists, update the data and notify the change
+                    pdfPageAdapter.notifyDataSetChanged();
+                }
+
+                recyclerView.scrollToPosition(0);
 
                 // Set the text view with the current file name
                 String fileName = uri.getLastPathSegment(); // or any method to get the file name
