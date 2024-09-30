@@ -1,6 +1,8 @@
 package com.example.pdf_viewer;
 
 
+import static java.security.AccessController.getContext;
+
 import android.content.Intent;
 
 import android.content.SharedPreferences;
@@ -44,6 +46,8 @@ import java.util.Collections;
 import java.util.List;
 
 import android.Manifest;
+import android.widget.Toast;
+
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -253,6 +257,7 @@ public class MainActivity extends AppCompatActivity {
 
         Uri nextPdfUri = allFileItems.get(currentPdfIndex).uri;
 
+        Toast.makeText(this, "Loading", Toast.LENGTH_SHORT).show();
         // Use Handler to delay loading execution
         handler.postDelayed(() -> {
             try {

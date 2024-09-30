@@ -3,6 +3,7 @@ package com.example.pdf_viewer;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.util.AttributeSet;
+import android.util.DisplayMetrics;
 import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
 
@@ -16,6 +17,10 @@ public class ZoomableRecyclerView extends RecyclerView {
     private float minScaleFactor = 1.0f;  // Minimum zoom level, no zooming out beyond default
 
     private float pivotX, pivotY;  // To keep track of zoom pivot points (for panning)
+
+    // Screen width for detecting middle 50%
+    private int screenWidth;
+    private int zoomAreaStart, zoomAreaEnd; // Boundaries of zoomable area (middle 50%)
 
     public ZoomableRecyclerView(Context context) {
         super(context);
@@ -34,11 +39,26 @@ public class ZoomableRecyclerView extends RecyclerView {
 
     private void init(Context context) {
         scaleGestureDetector = new ScaleGestureDetector(context, new ScaleListener());
+
+        // Get the screen width and calculate the zoom area bounds (middle 50%)
+        DisplayMetrics metrics = context.getResources().getDisplayMetrics();
+        screenWidth = metrics.widthPixels;
+        zoomAreaStart = screenWidth / 4; // 25% from the left
+        zoomAreaEnd = screenWidth * 3 / 4; // 25% from the right
     }
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
-        scaleGestureDetector.onTouchEvent(event);
+        // Get the X position of the touch event
+        float touchX = event.getX();
+
+        // Check if the touch is within the middle 50% of the screen
+        if (touchX >= zoomAreaStart && touchX <= zoomAreaEnd) {
+            // If inside the zoom area, handle the zoom gesture
+            scaleGestureDetector.onTouchEvent(event);
+        }
+
+        // Pass the touch event to the parent for other handling (e.g., scrolling)
         return super.onTouchEvent(event);
     }
 
@@ -70,5 +90,4 @@ public class ZoomableRecyclerView extends RecyclerView {
             return true;
         }
     }
-
 }
