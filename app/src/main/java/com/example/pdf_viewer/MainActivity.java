@@ -10,6 +10,7 @@ import android.graphics.Bitmap;
 import android.graphics.pdf.PdfRenderer;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.ParcelFileDescriptor;
 import android.provider.MediaStore;
 import android.provider.OpenableColumns;
@@ -17,6 +18,7 @@ import android.util.Log;
 import android.view.GestureDetector;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.WindowManager;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.ListView;
@@ -64,6 +66,8 @@ public class MainActivity extends AppCompatActivity {
     private boolean isAtBottom = false;
     private Button showFolderButton;
     private ListView folderListView;
+    private boolean isLoading = false;  // Add a flag to prevent spamming
+    private Handler handler = new Handler();  // Declare a handler for delayed execution
 
     // Create the ActivityResultLauncher for selecting a PDF
     private final ActivityResultLauncher<Intent> selectPdfLauncher = registerForActivityResult(
@@ -174,7 +178,6 @@ public class MainActivity extends AppCompatActivity {
             // Load the file items from the JSON file
             allFileItems.clear();
             // Call the modified function to get the FolderFileManager instance
-            // Call the modified function to get the FolderFileManager instance
             FolderFileManager folderFileManager = getInfoFromJsonFile2(jsonFilePath);
 
             // Now retrieve the list of FileItems from the FolderFileManager
@@ -226,32 +229,47 @@ public class MainActivity extends AppCompatActivity {
 
     private void loadNextPdf() {
 
-        if (!canLoadPdf) {
-            return; // Prevent loading if not allowed
+        if (isLoading) {
+            return; // Prevent function call if it's already loading
         }
 
+        isLoading = true;  // Set loading to true to block further presses
         canLoadPdf = false;
 
+        // Disable user touch interactions
+        getWindow().setFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);
+
         if (allFileItems.isEmpty() || currentPdfIndex == -1) {
-            appendLogMessage("No PDFs loaded or invalid current index.");
+            //appendLogMessage("No PDFs loaded or invalid current index.");
+            resetLoadingState();
             return;
         }
 
-        // Increment the current index
         currentPdfIndex++;
-
-        //appendLogMessage("Index after: "+currentPdfIndex);
-        // Ensure current index is valid
         if (currentPdfIndex >= allFileItems.size()) {
-            currentPdfIndex = 0; // Loop back to the first PDF
+            currentPdfIndex = 0;  // Loop back to the first PDF
         }
 
-        //appendLogMessage("Loading next PDF at index: " + currentPdfIndex);
-        Uri nextPdfUri = allFileItems.get(currentPdfIndex).uri; // Get URI from FileItem
-        loadPdf(nextPdfUri);
+        Uri nextPdfUri = allFileItems.get(currentPdfIndex).uri;
 
-        // Log the current state
-        //appendLogMessage("Current PDF URI: " + nextPdfUri.toString());
+        // Use Handler to delay loading execution
+        handler.postDelayed(() -> {
+            try {
+                loadPdf(nextPdfUri);  // Call your PDF loading function
+            } catch (Exception e) {
+                e.printStackTrace();
+            } finally {
+                resetLoadingState();  // Always reset the state after loading
+            }
+        }, 1000);  // Delay in milliseconds (e.g., 500ms)
+    }
+
+    // Function to reset loading state and re-enable touch interactions
+    private void resetLoadingState() {
+        isLoading = false;  // Reset the loading flag
+        canLoadPdf = true;  // Allow the next PDF to be loaded
+        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);  // Re-enable touch input
     }
 
     private void loadPdf(Uri uri) {
@@ -442,15 +460,15 @@ public class MainActivity extends AppCompatActivity {
             folderInfo.put("files", filesArray);
 
             // Save the JSON to a file in app storage
-            File file = new File(getFilesDir(), folderName + "_info.json"); // File name can be customized
+            File file = new File(getFilesDir(), folderName); // File name can be customized
             FileWriter writer = new FileWriter(file);
             writer.write(folderInfo.toString());
             writer.flush();
             writer.close();
 
-            appendLogMessage("Folder info saved to JSON: " + file.getAbsolutePath());
+            //appendLogMessage("Folder info saved to JSON: " + file.getAbsolutePath());
         } catch (JSONException | IOException e) {
-            appendLogMessage("Error saving folder info to JSON: " + e.getMessage());
+            //appendLogMessage("Error saving folder info to JSON: " + e.getMessage());
         }
     }
 
@@ -461,7 +479,7 @@ public class MainActivity extends AppCompatActivity {
         if (jsonFiles != null && jsonFiles.length > 0) {
             for (File jsonFile : jsonFiles) {
                 if (jsonFile.delete()) {
-                    appendLogMessage("Deleted JSON file: " + jsonFile.getName());
+                    //appendLogMessage("Deleted JSON file: " + jsonFile.getName());
                 } else {
                     //appendLogMessage("Failed to delete JSON file: " + jsonFile.getName());
                 }
@@ -504,7 +522,7 @@ public class MainActivity extends AppCompatActivity {
                 JSONObject fileObject = jsonArray.getJSONObject(i);
                 String name = fileObject.getString("fileName"); // Use correct key
                 String uriString = fileObject.getString("fileUri"); // Use correct key
-                Log.d("readingJsonItems", "File Item: " + name + " - " + uriString);
+                //Log.d("readingJsonItems", "File Item: " + name + " - " + uriString);
                 Uri uri = Uri.parse(uriString);
 
                 allFileItems.add(new FolderFileManager.FileItem(name, uri));
@@ -622,7 +640,7 @@ public class MainActivity extends AppCompatActivity {
             for (DocumentFile file : folder.listFiles()) {
                 if (file.isFile() && file.getName() != null && file.getName().endsWith(".pdf")) {
                     allFileItems.add(new FolderFileManager.FileItem(file.getName(), file.getUri())); // Update to use FolderFileManager.FileItem
-                    appendLogMessage("File Order: Adding file: " + file.getName());
+                    //appendLogMessage("File Order: Adding file: " + file.getName());
                 }
             }
 
@@ -735,15 +753,15 @@ public class MainActivity extends AppCompatActivity {
         File dir = getFilesDir(); // Get the directory where JSON files are stored
         File[] jsonFiles = dir.listFiles((d, name) -> name.endsWith(".json")); // Filter for JSON files
 
-        Log.d("Updating", "about to update");
+        //Log.d("Updating", "about to update");
 
         if (jsonFiles != null && jsonFiles.length > 0) {
             for (File jsonFile : jsonFiles) {
-                Log.d("Updating", "Processing JSON file: " + jsonFile.getName());
+                //Log.d("Updating", "Processing JSON file: " + jsonFile.getName());
 
                 // Load existing file items from the JSON
                 FolderFileManager folderInfo = getInfoFromJsonFile2(jsonFile.getAbsolutePath());
-                Log.d("itemsINFO", "Name: " + folderInfo.getFolderName() + " Chapter: " + folderInfo.getFileItems() + " Path: " + folderInfo.getFolderPath());
+                //Log.d("itemsINFO", "Name: " + folderInfo.getFolderName() + " Chapter: " + folderInfo.getFileItems() + " Path: " + folderInfo.getFolderPath());
 
                 // Assuming folderInfo has the correct folder path stored as a URI
                 Uri folderUri = Uri.parse(folderInfo.getFolderPath());
@@ -752,7 +770,7 @@ public class MainActivity extends AppCompatActivity {
                 if (folderUri != null) {
                     // Get the list of files in the directory
                     List<DocumentFile> filesInDirectory = getFilesFromUri(folderUri); // You need to implement this
-                    Log.d("itemsINFO", "Found " + (filesInDirectory != null ? filesInDirectory.size() : 0) + " files in directory.");
+                    //Log.d("itemsINFO", "Found " + (filesInDirectory != null ? filesInDirectory.size() : 0) + " files in directory.");
 
                     // Get existing file names from folderInfo
                     List<String> existingFileNames = new ArrayList<>();
@@ -765,24 +783,24 @@ public class MainActivity extends AppCompatActivity {
                         for (DocumentFile file : filesInDirectory) {
                             String fileName = file.getName();
                             if (fileName != null && !existingFileNames.contains(fileName)) {
-                                Log.d("itemsINFO", "New file found: " + fileName);
+                                //Log.d("itemsINFO", "New file found: " + fileName);
                                 // Add the new file to folderInfo
                                 folderInfo.addFileItem(new FolderFileManager.FileItem(fileName, file.getUri())); // Assuming you have a way to get the URI
                             } else {
-                                Log.d("itemsINFO", "File already exists: " + fileName);
+                                //Log.d("itemsINFO", "File already exists: " + fileName);
                             }
                         }
                         // Save updated folderInfo back to the JSON file using your method
                         saveFolderInfoAsJson(folderInfo.getFolderName(), folderInfo.getFolderPath(), folderInfo.getFileItems());
                     } else {
-                        Log.w("itemsINFO", "No files found or an error occurred while accessing the directory.");
+                        //Log.w("itemsINFO", "No files found or an error occurred while accessing the directory.");
                     }
                 } else {
-                    Log.e("itemsINFO", "Invalid folder URI: " + folderInfo.getFolderPath());
+                    //Log.e("itemsINFO", "Invalid folder URI: " + folderInfo.getFolderPath());
                 }
             }
         } else {
-            Log.w("Updating", "No JSON files found for updating.");
+            //Log.w("Updating", "No JSON files found for updating.");
         }
     }
 

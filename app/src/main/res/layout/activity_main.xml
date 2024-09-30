@@ -7,15 +7,29 @@
     tools:context=".MainActivity">
 
 
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:fillViewport="true"
+        android:scrollbars="horizontal">
 
-    <androidx.recyclerview.widget.RecyclerView
+    <ScrollView
+        android:layout_width="wrap_content"
+        android:layout_height="match_parent"
+        android:fillViewport="true"
+        android:scrollbars="vertical">
+    <com.example.pdf_viewer.ZoomableRecyclerView
         android:id="@+id/recyclerView"
+        android:scrollbars="vertical"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent"
         android:clipToPadding="false"
         android:padding="16dp"/>
+
+    </ScrollView>
+    </HorizontalScrollView>
 
 
 
