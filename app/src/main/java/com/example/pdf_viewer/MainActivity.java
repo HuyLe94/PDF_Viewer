@@ -474,7 +474,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void deleteAllJsonFiles() {
         File dir = getFilesDir(); // Get the directory where JSON files are stored
-        File[] jsonFiles = dir.listFiles((d, name) -> name.endsWith(".json")); // Filter for JSON files
+        File[] jsonFiles = dir.listFiles(); // Filter for JSON files
 
         if (jsonFiles != null && jsonFiles.length > 0) {
             for (File jsonFile : jsonFiles) {
@@ -691,7 +691,7 @@ public class MainActivity extends AppCompatActivity {
 
         // Assuming the JSON files are stored in the app's internal storage
         File dir = getFilesDir(); // Get the internal storage directory
-        File[] files = dir.listFiles((d, name) -> name.endsWith(".json")); // Filter for JSON files
+        File[] files = dir.listFiles(); // Filter for JSON files
 
         // Clear the previous entries
         List<String> jsonFileNames = new ArrayList<>();
@@ -751,7 +751,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void updateFolders() {
         File dir = getFilesDir(); // Get the directory where JSON files are stored
-        File[] jsonFiles = dir.listFiles((d, name) -> name.endsWith(".json")); // Filter for JSON files
+        File[] jsonFiles = dir.listFiles(); // Filter for JSON files
 
         //Log.d("Updating", "about to update");
 
