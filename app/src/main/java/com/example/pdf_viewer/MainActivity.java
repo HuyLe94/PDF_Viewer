@@ -696,22 +696,29 @@ public class MainActivity extends AppCompatActivity {
 
         // Assuming the JSON files are stored in the app's internal storage
         File dir = getFilesDir(); // Get the internal storage directory
-        File[] files = dir.listFiles(); // Filter for JSON files
+        File[] files = dir.listFiles(); // Get all files in the directory
 
         // Clear the previous entries
         List<String> jsonFileNames = new ArrayList<>();
 
         if (files != null) {
             for (File file : files) {
-                jsonFileNames.add(file.getName()); // Add the name of each JSON file
+                // Check if the file is a regular file, ends with .json,
+                // and is not one of the unwanted files
+                if (file.isFile()
+                        && !file.getName().equals("rList")
+                        && !file.getName().equals("profileInstalled")) {
+                    jsonFileNames.add(file.getName()); // Add the name of each JSON file
+                }
             }
         }
+
         // Set up the adapter for the ListView
         ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, jsonFileNames);
         ListView folderListView = findViewById(R.id.folderListView);
         folderListView.setAdapter(adapter);
-
     }
+
 
     private void displayNextBatch(ArrayAdapter<String> adapter) {
         // Retrieve the batch of FileItem objects from FolderFileManager

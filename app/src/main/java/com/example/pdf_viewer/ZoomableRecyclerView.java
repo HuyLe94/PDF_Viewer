@@ -43,8 +43,8 @@ public class ZoomableRecyclerView extends RecyclerView {
         // Get the screen width and calculate the zoom area bounds (middle 50%)
         DisplayMetrics metrics = context.getResources().getDisplayMetrics();
         screenWidth = metrics.widthPixels;
-        zoomAreaStart = screenWidth / 4; // 25% from the left
-        zoomAreaEnd = screenWidth * 3 / 4; // 25% from the right
+        zoomAreaStart = screenWidth / 100 *35; // 25% from the left
+        zoomAreaEnd = screenWidth / 100 *65; // 25% from the right
     }
 
     @Override
