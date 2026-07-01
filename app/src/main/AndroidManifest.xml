@@ -3,9 +3,11 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
+    <uses-permission android:name="android.permission.INTERNET"/>
 
     <application
         android:allowBackup="true"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:requestLegacyExternalStorage="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
@@ -33,6 +35,15 @@
                 <data android:scheme="content" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".RemoteLibraryActivity"
+            android:exported="false"/>
+
+        <activity
+            android:name=".RemoteReaderActivity"
+            android:exported="false"/>
+
 
     </application>
 

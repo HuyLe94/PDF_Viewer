@@ -44,6 +44,7 @@ import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import android.content.Intent;
 
 import android.Manifest;
 import android.widget.Toast;
@@ -149,6 +150,13 @@ public class MainActivity extends AppCompatActivity {
                     fileListView.setVisibility(View.GONE);
                 }
         );
+
+        Button remoteLibraryButton = findViewById(R.id.remoteLibraryButton);
+        remoteLibraryButton.setOnClickListener(v -> {
+            Intent intent = new Intent(MainActivity.this, RemoteLibraryActivity.class);
+            startActivity(intent);
+        });
+
 
         recyclerView.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override

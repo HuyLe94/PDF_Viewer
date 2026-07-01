@@ -46,7 +46,6 @@ public class FolderFileManager {
         Collections.sort(fileItems, Comparator.comparingDouble(FolderFileManager::extractNumber));
     }
 
-    // Helper method to extract numeric value from file names
     // Helper method to extract numeric value from file names, including decimals
     private static double extractNumber(FileItem fileItem) {
         Pattern pattern = Pattern.compile("\\d+(\\.\\d+)?"); // Match whole numbers and decimals
